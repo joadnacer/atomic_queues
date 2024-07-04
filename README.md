@@ -82,7 +82,7 @@ Benchmarked queues are:
 - `jdz-cmp-pow2`: jdz queue: `jdz::SpscQueue<uint64_t, 65536, jdz::EnforcePowerOfTwo>` - compile-time power of 2 capacity.
 - `jdz-run-pow2`: jdz queue: `jdz::SpscQueue<uint64_t, 0, jdz:::EnforcePowerOfTwo>` - runtime power of 2 capacity.
 - `jdz-cmp`:      jdz queue: `jdz::SpscQueue<uint64_t, 65537, jdz::DoNotEnforcePowerOfTwo>` - compile-time non-power of 2 capacity.
-- `jdz-run`:      jdz queue: `jdz::SpscQueue<uint64_t, 0, jdz::DoNotEnforcePowerOfTwo>` - runtime power of 2 capacity.
+- `jdz-run`:      jdz queue: `jdz::SpscQueue<uint64_t, 0, jdz::DoNotEnforcePowerOfTwo>` - runtime non-power of 2 capacity.
 - `rigtorp`:      [Erik Rigtorp's SpscQueue](https://github.com/rigtorp/SPSCQueue).
 - `atomic_queue`: [Maxim Egorushkin's atomic_queue](https://github.com/max0x7ba/atomic_queue) with SPSC=true.
 - `deaod`:        [deaod's spsc_queue](https://github.com/Deaod/spsc_queue).
@@ -109,7 +109,7 @@ Benchmarked queues are:
 - `jdz-cmp-pow2`:  jdz queue: `jdz::MpmcQueue<uint64_t, 65536, jdz::EnforcePowerOfTwo>` - compile-time power of 2 capacity.
 - `jdz-run-pow2`:  jdz queue: `jdz::MpmcQueue<uint64_t, 0, jdz:::EnforcePowerOfTwo>` - runtime power of 2 capacity.
 - `jdz-cmp`:       jdz queue: `jdz::MpmcQueue<uint64_t, 65537, jdz::DoNotEnforcePowerOfTwo>` - compile-time non-power of 2 capacity.
-- `jdz-run`:       jdz queue: `jdz::MpmcQueue<uint64_t, 0, jdz::DoNotEnforcePowerOfTwo>` - runtime power of 2 capacity.
+- `jdz-run`:       jdz queue: `jdz::MpmcQueue<uint64_t, 0, jdz::DoNotEnforcePowerOfTwo>` - runtime non-power of 2 capacity.
 - `rigtorp`:       [Erik Rigtorp's MpmcQueue](https://github.com/rigtorp/MPMCQueue).
 - `atomic_queue`:  [Maxim Egorushkin's atomic_queue](https://github.com/max0x7ba/atomic_queue).
 - `moodycamel`:    [moodycamel's ConcurrentQueue](https://github.com/cameron314/concurrentqueue).
