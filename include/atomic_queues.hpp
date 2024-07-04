@@ -228,7 +228,7 @@ private:
     using buffer_t = typename std::conditional_t<N == 0, runtime_buf, comptime_buf>;
 
 protected:
-    buffer_t buffer_;
+    alignas(cache_line) buffer_t buffer_;
 
     alignas(cache_line) const size_t buffer_size_;
 
