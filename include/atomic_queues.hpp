@@ -310,10 +310,8 @@ public:
 
     /// Will return a negative value if there are one or more readers waiting on an empty queue
     [[nodiscard]] size_t size() const noexcept {
-        const ptrdiff_t size =  static_cast<const DerivedImpl*>(this)->get_enqueue_pos()
-                              - static_cast<const DerivedImpl*>(this)->get_dequeue_pos();
-
-        return static_cast<size_t>(size < 0 ? -size : size);
+        return static_cast<const DerivedImpl*>(this)->get_enqueue_pos()
+             - static_cast<const DerivedImpl*>(this)->get_dequeue_pos();
     }
 
     [[nodiscard]] size_t capacity() const noexcept {
