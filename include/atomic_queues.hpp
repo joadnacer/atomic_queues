@@ -289,7 +289,7 @@ public:
         return static_cast<DerivedImpl*>(this)->try_emplace(std::forward<Args &&...>(args)...);
     }
 
-    bool try_push(const T &data) noexcept
+    [[nodiscard]] bool try_push(const T &data) noexcept
     requires std::is_nothrow_copy_constructible_v<T> {
         return static_cast<DerivedImpl*>(this)->try_emplace(data);
     }
