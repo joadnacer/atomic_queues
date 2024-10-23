@@ -69,8 +69,8 @@ concept OptionalPowerOfTwo = IsValidSizeConstraint<SizeConstraint>
 template <size_t N>
 concept ZeroOrGreaterThanOne = N == 0 || N > 1;
 
-template <typename T, IsValidSizeConstraint SizeConstraint>
-class RuntimeBuffer
+template <typename T, IsValidSizeConstraint SizeConstraint, size_t N = 0>
+class Buffer
 {
 private:
     T *buffer_;
@@ -81,20 +81,23 @@ private:
     std::allocator<T> allocator_;
 
 public:
-    explicit RuntimeBuffer(const size_t buffer_size, const std::allocator<T> &allocator)
+    explicit Buffer(const size_t buffer_size, const std::allocator<T> &allocator)
         : buffer_size_(buffer_size),
           buffer_mask_(buffer_size_ - 1),
           allocator_(allocator) {
             buffer_ = allocator_.allocate(buffer_size + 1);
         }
 
-    ~RuntimeBuffer() noexcept {
+    ~Buffer() noexcept {
         allocator_.deallocate(buffer_, buffer_size_ + 1);
     }
 
     T& operator[](const size_t index) noexcept {
         if constexpr (IsEnforcePowerOfTwo<SizeConstraint>) {
             return buffer_[index & buffer_mask_]; 
+        }
+        else if constexpr (N != 0) {
+            return buffer_[index % N];
         }
         else {
             return buffer_[index % buffer_size_];
@@ -105,33 +108,12 @@ public:
         if constexpr (IsEnforcePowerOfTwo<SizeConstraint>) {
             return buffer_[index & buffer_mask_];
         }
+        else if constexpr (N != 0) {
+            return buffer_[index % N];
+        }
         else {
             return buffer_[index % buffer_size_];
         }
-    }
-};
-
-template <typename T>
-using RawData = std::array<std::byte, sizeof(T)>;
-
-template <typename T, size_t N, IsValidSizeConstraint SizeConstraint>
-requires OptionalPowerOfTwo<N, SizeConstraint>
-class ComptimeBuffer
-{
-private:
-    alignas(alignof(T)) RawData<T> buffer_[N+1];
-
-public:
-    ComptimeBuffer(auto, auto) noexcept {}
-
-    ~ComptimeBuffer() noexcept = default;
-
-    T& operator[](const size_t index) noexcept {
-        return reinterpret_cast<T *> (buffer_)[index % N];
-    }
-
-    const T& operator[](const size_t index) const noexcept {
-        return reinterpret_cast<T *>(buffer_)[index % N];
     }
 };
 
@@ -171,6 +153,8 @@ struct IsConstructedField<false> {
     IsConstructedField(bool is_constructed) : is_constructed(is_constructed) {}
 };
 
+template <typename T>
+using RawData = std::array<std::byte, sizeof(T)>;
 
 template <typename T, bool HasSeq>
 class Cell : public SeqField<HasSeq>, public IsConstructedField<HasSeq>
@@ -220,12 +204,10 @@ class BaseQueue
 {
 private:
     using value_t = Cell<T, UseSeq>;
-    using runtime_buf = RuntimeBuffer<value_t, SizeConstraint>;
-    using comptime_buf = ComptimeBuffer<value_t, N, SizeConstraint>;
 
     using allocator_t = typename std::allocator<value_t>;
 
-    using buffer_t = typename std::conditional_t<N == 0, runtime_buf, comptime_buf>;
+    using buffer_t = Buffer<value_t, SizeConstraint, N>;
 
 protected:
     alignas(cache_line) buffer_t buffer_;
