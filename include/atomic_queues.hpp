@@ -69,6 +69,11 @@ concept OptionalPowerOfTwo = IsValidSizeConstraint<SizeConstraint>
 template <size_t N>
 concept ZeroOrGreaterThanOne = N == 0 || N > 1;
 
+template <typename T>
+concept IsTrivialType = std::is_trivially_copyable_v<T>
+                     && std::is_trivially_destructible_v<T>
+                     && sizeof(T) <= sizeof(uint64_t);
+
 template <typename T, IsValidSizeConstraint SizeConstraint, size_t N = 0>
 class Buffer
 {
@@ -132,18 +137,23 @@ struct SeqField<false> {
     SeqField(size_t) {}
 };
 
-template <bool HasSeq>
+template <bool HasSeq, bool TriviallyDestructible>
 struct IsConstructedField;
 
+template <bool HasSeq>
+struct IsConstructedField<HasSeq, true> {
+    IsConstructedField(bool is_constructed) {}
+};
+
 template<>
-struct IsConstructedField<true> {
+struct IsConstructedField<true, false> {
     bool is_constructed;
 
     IsConstructedField(bool is_constructed) : is_constructed(is_constructed) {}
 };
 
 template<>
-struct IsConstructedField<false> {
+struct IsConstructedField<false, false> {
     #ifdef __aarch64__
     alignas(cache_line) bool is_constructed;
     #else
@@ -157,32 +167,73 @@ template <typename T>
 using RawData = std::array<std::byte, sizeof(T)>;
 
 template <typename T, bool HasSeq>
-class Cell : public SeqField<HasSeq>, public IsConstructedField<HasSeq>
+class Cell;
+
+template <typename T, bool HasSeq>
+requires IsTrivialType<T>
+class Cell<T, HasSeq> : public SeqField<HasSeq> {
+private:
+    T val_;
+
+public:
+    Cell() : SeqField<HasSeq>(0) {}
+
+    Cell(size_t i) : SeqField<HasSeq>(i) {}
+
+    void construct(T val) noexcept {
+        val_ = val;
+    }
+
+    T read() noexcept {
+        return val_;
+    }
+
+    void destroy() {}
+};
+
+template <typename T, bool HasSeq>
+class Cell : public SeqField<HasSeq>,
+                        public IsConstructedField<HasSeq, std::is_trivially_destructible_v<T>>
 {
 private:
+    static constexpr bool IsTriviallyDestructible   = std::is_trivially_destructible_v<T>;
+    static constexpr bool IsNotTriviallyDestructible = !IsTriviallyDestructible;
+
     alignas(alignof(T)) RawData<T> data_;
 
 public:
-    Cell(size_t i) : SeqField<HasSeq>(i), IsConstructedField<HasSeq>(false) {}
+    Cell() : SeqField<HasSeq>(0), IsConstructedField<HasSeq, IsTriviallyDestructible>(false) {}
+
+    Cell(size_t i) : SeqField<HasSeq>(i), IsConstructedField<HasSeq, IsTriviallyDestructible>(false) {}
+
+    ~Cell() noexcept
+    requires TriviallyDestructible {}
 
     ~Cell() noexcept {
-        if (this->is_constructed) destroy();
+        if constexpr (IsNotTriviallyDestructible) {
+            if (this->is_constructed) destroy();
+        }
     }
 
     template <typename ...Args>
-    void construct(Args &&...args) requires std::is_nothrow_constructible_v<T, Args&&...> {
+    void construct(Args &&...args) noexcept
+    requires std::is_nothrow_constructible_v<T, Args&&...> {
         new (&data_) T(std::forward<Args>(args)...);
 
-        this->is_constructed = true;
+        if constexpr (IsNotTriviallyDestructible) {
+            this->is_constructed = true;
+        }
     }
 
     void destroy() noexcept {
-        reinterpret_cast<T *>(&data_)->~T();
+        if constexpr (IsNotTriviallyDestructible) {
+            reinterpret_cast<T *>(&data_)->~T();
 
-        this->is_constructed = false;
+            this->is_constructed = false;
+        }
     }
 
-    T &&move() noexcept {
+    T &&read() noexcept {
         return reinterpret_cast<T &&>(data_);
     }
 };
@@ -368,7 +419,7 @@ public:
 
         while (pos + 1 != cell.seq.load(std::memory_order::acquire));
 
-        v = cell.move();
+        v = cell.read();
         cell.destroy();
 
         cell.seq.store(pos + this->buffer_size_, std::memory_order::release);
@@ -383,7 +434,7 @@ public:
             const int64_t diff = seq - (pos + 1);
 
             if (diff == 0 && details::cas_add_one_relaxed(dequeue_pos_, pos)) {
-                v = cell.move();
+                v = cell.read();
                 cell.destroy();
 
                 cell.seq.store(pos + this->buffer_size_, std::memory_order::release);
@@ -463,7 +514,7 @@ public:
             cached_dequeue_limit_ = enqueue_pos_.load(std::memory_order::acquire);
         }
 
-        v = cell.move();
+        v = cell.read();
         cell.destroy();
 
         dequeue_pos_.store(pos + 1, std::memory_order::release);
@@ -479,7 +530,7 @@ public:
             if (pos == cached_dequeue_limit_) return false;
         }
 
-        v = cell.move();
+        v = cell.read();
         cell.destroy();
 
         dequeue_pos_.store(pos + 1, std::memory_order::release);
