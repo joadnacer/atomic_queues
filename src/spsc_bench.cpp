@@ -16,10 +16,10 @@ using jdz_queue_run_pow2 = typename jdz::SpscQueue<uint64_t, 0, jdz::EnforcePowe
 using jdz_queue_cmp = typename jdz::SpscQueue<uint64_t, capacity + 1, jdz::DoNotEnforcePowerOfTwo, jdz::UseStackBuffer>;
 using jdz_queue_run = typename jdz::SpscQueue<uint64_t, 0, jdz::DoNotEnforcePowerOfTwo>;
 
-using jdz_mpmc_queue_cmp_pow2 = typename jdz::SpscQueue<uint64_t, capacity, jdz::EnforcePowerOfTwo, jdz::UseStackBuffer>;
-using jdz_mpmc_queue_run_pow2 = typename jdz::SpscQueue<uint64_t, 0, jdz::EnforcePowerOfTwo>;
-using jdz_mpmc_queue_cmp = typename jdz::SpscQueue<uint64_t, capacity + 1, jdz::DoNotEnforcePowerOfTwo, jdz::UseStackBuffer>;
-using jdz_mpmc_queue_run = typename jdz::SpscQueue<uint64_t, 0, jdz::DoNotEnforcePowerOfTwo>;
+using jdz_mpmc_queue_cmp_pow2 = typename jdz::MpmcQueue<uint64_t, capacity, jdz::EnforcePowerOfTwo, jdz::UseStackBuffer>;
+using jdz_mpmc_queue_run_pow2 = typename jdz::MpmcQueue<uint64_t, 0, jdz::EnforcePowerOfTwo>;
+using jdz_mpmc_queue_cmp = typename jdz::MpmcQueue<uint64_t, capacity + 1, jdz::DoNotEnforcePowerOfTwo, jdz::UseStackBuffer>;
+using jdz_mpmc_queue_run = typename jdz::MpmcQueue<uint64_t, 0, jdz::DoNotEnforcePowerOfTwo>;
 
 struct QueueType {
     std::string name;
