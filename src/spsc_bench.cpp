@@ -11,14 +11,14 @@
 constexpr uint64_t total_rounds = 100'000'000;
 constexpr size_t capacity = 65536;
 
-using jdz_queue_cmp_pow2 = typename jdz::SpscQueue<uint64_t, capacity, jdz::EnforcePowerOfTwo>;
+using jdz_queue_cmp_pow2 = typename jdz::SpscQueue<uint64_t, capacity, jdz::EnforcePowerOfTwo, jdz::UseStackBuffer>;
 using jdz_queue_run_pow2 = typename jdz::SpscQueue<uint64_t, 0, jdz::EnforcePowerOfTwo>;
-using jdz_queue_cmp = typename jdz::SpscQueue<uint64_t, capacity + 1, jdz::DoNotEnforcePowerOfTwo>;
+using jdz_queue_cmp = typename jdz::SpscQueue<uint64_t, capacity + 1, jdz::DoNotEnforcePowerOfTwo, jdz::UseStackBuffer>;
 using jdz_queue_run = typename jdz::SpscQueue<uint64_t, 0, jdz::DoNotEnforcePowerOfTwo>;
 
-using jdz_mpmc_queue_cmp_pow2 = typename jdz::SpscQueue<uint64_t, capacity, jdz::EnforcePowerOfTwo>;
+using jdz_mpmc_queue_cmp_pow2 = typename jdz::SpscQueue<uint64_t, capacity, jdz::EnforcePowerOfTwo, jdz::UseStackBuffer>;
 using jdz_mpmc_queue_run_pow2 = typename jdz::SpscQueue<uint64_t, 0, jdz::EnforcePowerOfTwo>;
-using jdz_mpmc_queue_cmp = typename jdz::SpscQueue<uint64_t, capacity + 1, jdz::DoNotEnforcePowerOfTwo>;
+using jdz_mpmc_queue_cmp = typename jdz::SpscQueue<uint64_t, capacity + 1, jdz::DoNotEnforcePowerOfTwo, jdz::UseStackBuffer>;
 using jdz_mpmc_queue_run = typename jdz::SpscQueue<uint64_t, 0, jdz::DoNotEnforcePowerOfTwo>;
 
 struct QueueType {

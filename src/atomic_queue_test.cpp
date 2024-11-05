@@ -158,16 +158,19 @@ void fuzzTest(size_t num_threads, size_t capacity) {
 TEMPLATE_TEST_CASE("MpmcQueueTest PowerOfTwo", "[unit][mpmcqueue]", 
         (MpmcQueue<TestElement, 0, EnforcePowerOfTwo>),
         (MpmcQueue<TestElement, 4, EnforcePowerOfTwo>),
+        (MpmcQueue<TestElement, 4, EnforcePowerOfTwo, UseStackBuffer>),
         (MpmcQueue<TestElement, 0, DoNotEnforcePowerOfTwo>),
-        (MpmcQueue<TestElement, 4, DoNotEnforcePowerOfTwo>)) {
+        (MpmcQueue<TestElement, 4, DoNotEnforcePowerOfTwo>),
+        (MpmcQueue<TestElement, 4, DoNotEnforcePowerOfTwo, UseStackBuffer>)) {
     TEST_CONSTRUCTORS(testDoubleFillAndEmpty<TestType>(4), 8);
 
     TEST_CONSTRUCTORS(testAllMethods<TestType>(4), 6);
 }
 
-TEMPLATE_TEST_CASE("MpmcQueueTest Methods NonPowerOfTwo", "[unit][mpmcqueue]", 
+TEMPLATE_TEST_CASE("MpmcQueueTest NonPowerOfTwo", "[unit][mpmcqueue]", 
         (MpmcQueue<TestElement, 0, DoNotEnforcePowerOfTwo>),
-        (MpmcQueue<TestElement, 5, DoNotEnforcePowerOfTwo>)) {
+        (MpmcQueue<TestElement, 5, DoNotEnforcePowerOfTwo>),
+        (MpmcQueue<TestElement, 5, DoNotEnforcePowerOfTwo, UseStackBuffer>)) {
     TEST_CONSTRUCTORS(testDoubleFillAndEmpty<TestType>(5), 10);
 
     TEST_CONSTRUCTORS(testAllMethods<TestType>(5), 7);
@@ -176,8 +179,10 @@ TEMPLATE_TEST_CASE("MpmcQueueTest Methods NonPowerOfTwo", "[unit][mpmcqueue]",
 TEMPLATE_TEST_CASE("SpscQueueTest PowerOfTwo", "[unit][spscqueue]", 
         (SpscQueue<TestElement, 0, EnforcePowerOfTwo>),
         (SpscQueue<TestElement, 4, EnforcePowerOfTwo>),
+        (SpscQueue<TestElement, 4, EnforcePowerOfTwo, UseStackBuffer>),
         (SpscQueue<TestElement, 0, DoNotEnforcePowerOfTwo>),
-        (SpscQueue<TestElement, 4, DoNotEnforcePowerOfTwo>)) {
+        (SpscQueue<TestElement, 4, DoNotEnforcePowerOfTwo>),
+        (SpscQueue<TestElement, 4, DoNotEnforcePowerOfTwo, UseStackBuffer>)) {
     TEST_CONSTRUCTORS(testDoubleFillAndEmpty<TestType>(4), 8);
 
     TEST_CONSTRUCTORS(testAllMethods<TestType>(4), 6);
@@ -185,7 +190,8 @@ TEMPLATE_TEST_CASE("SpscQueueTest PowerOfTwo", "[unit][spscqueue]",
 
 TEMPLATE_TEST_CASE("SpscQueueTest NonPowerOfTwo", "[unit][spscqueue]", 
         (SpscQueue<TestElement, 0, DoNotEnforcePowerOfTwo>),
-        (SpscQueue<TestElement, 5, DoNotEnforcePowerOfTwo>)) {
+        (SpscQueue<TestElement, 5, DoNotEnforcePowerOfTwo>),
+        (SpscQueue<TestElement, 5, DoNotEnforcePowerOfTwo, UseStackBuffer>)) {
     TEST_CONSTRUCTORS(testDoubleFillAndEmpty<TestType>(5), 10);
 
     TEST_CONSTRUCTORS(testAllMethods<TestType>(5), 7);
@@ -194,8 +200,10 @@ TEMPLATE_TEST_CASE("SpscQueueTest NonPowerOfTwo", "[unit][spscqueue]",
 TEMPLATE_TEST_CASE("MpmcFuzzQueueTest PowerOfTwo", "[fuzz][mpmcqueue]", 
         (MpmcQueue<uint64_t, 0, EnforcePowerOfTwo>),
         (MpmcQueue<uint64_t, 8192, EnforcePowerOfTwo>),
+        (MpmcQueue<uint64_t, 8192, EnforcePowerOfTwo, UseStackBuffer>),
         (MpmcQueue<uint64_t, 0, DoNotEnforcePowerOfTwo>),
-        (MpmcQueue<uint64_t, 8192, DoNotEnforcePowerOfTwo>)) {
+        (MpmcQueue<uint64_t, 8192, DoNotEnforcePowerOfTwo>),
+        (MpmcQueue<uint64_t, 8192, DoNotEnforcePowerOfTwo, UseStackBuffer>)) {
     fuzzTest<TestType>(1, 8192);
     fuzzTest<TestType>(4, 8192);
     fuzzTest<TestType>(8, 8192);
@@ -204,8 +212,10 @@ TEMPLATE_TEST_CASE("MpmcFuzzQueueTest PowerOfTwo", "[fuzz][mpmcqueue]",
 TEMPLATE_TEST_CASE("MpmcFuzzQueueTest PowerOfTwo MinSize", "[fuzz][mpmcqueue]", 
         (MpmcQueue<uint64_t, 0, EnforcePowerOfTwo>),
         (MpmcQueue<uint64_t, 2, EnforcePowerOfTwo>),
+        (MpmcQueue<uint64_t, 2, EnforcePowerOfTwo, UseStackBuffer>),
         (MpmcQueue<uint64_t, 0, DoNotEnforcePowerOfTwo>),
-        (MpmcQueue<uint64_t, 2, DoNotEnforcePowerOfTwo>)) {
+        (MpmcQueue<uint64_t, 2, DoNotEnforcePowerOfTwo>),
+        (MpmcQueue<uint64_t, 2, DoNotEnforcePowerOfTwo, UseStackBuffer>)) {
     fuzzTest<TestType>(1, 2);
     fuzzTest<TestType>(4, 2);
     fuzzTest<TestType>(8, 2);
@@ -213,7 +223,8 @@ TEMPLATE_TEST_CASE("MpmcFuzzQueueTest PowerOfTwo MinSize", "[fuzz][mpmcqueue]",
 
 TEMPLATE_TEST_CASE("MpmcFuzzQueueTest NonPowerOfTwo", "[fuzz][mpmcqueue]", 
         (MpmcQueue<uint64_t, 0, DoNotEnforcePowerOfTwo>),
-        (MpmcQueue<uint64_t, 8193, DoNotEnforcePowerOfTwo>)) {
+        (MpmcQueue<uint64_t, 8193, DoNotEnforcePowerOfTwo>),
+        (MpmcQueue<uint64_t, 8193, DoNotEnforcePowerOfTwo, UseStackBuffer>)) {
     fuzzTest<TestType>(1, 8193);
     fuzzTest<TestType>(4, 8193);
     fuzzTest<TestType>(8, 8193);
@@ -221,7 +232,8 @@ TEMPLATE_TEST_CASE("MpmcFuzzQueueTest NonPowerOfTwo", "[fuzz][mpmcqueue]",
 
 TEMPLATE_TEST_CASE("MpmcFuzzQueueTest NonPowerOfTwo MinSize", "[fuzz][mpmcqueue]", 
         (MpmcQueue<uint64_t, 0, DoNotEnforcePowerOfTwo>),
-        (MpmcQueue<uint64_t, 3, DoNotEnforcePowerOfTwo>)) {
+        (MpmcQueue<uint64_t, 3, DoNotEnforcePowerOfTwo>),
+        (MpmcQueue<uint64_t, 3, DoNotEnforcePowerOfTwo, UseStackBuffer>)) {
     fuzzTest<TestType>(1, 3);
     fuzzTest<TestType>(4, 3);
     fuzzTest<TestType>(8, 3);
@@ -230,27 +242,33 @@ TEMPLATE_TEST_CASE("MpmcFuzzQueueTest NonPowerOfTwo MinSize", "[fuzz][mpmcqueue]
 TEMPLATE_TEST_CASE("SpscQueueTest PowerOfTwo", "[fuzz][spscqueue]", 
         (SpscQueue<uint64_t, 0, EnforcePowerOfTwo>),
         (SpscQueue<uint64_t, 8192, EnforcePowerOfTwo>),
+        (SpscQueue<uint64_t, 8192, EnforcePowerOfTwo, UseStackBuffer>),
         (SpscQueue<uint64_t, 0, DoNotEnforcePowerOfTwo>),
-        (SpscQueue<uint64_t, 8192, DoNotEnforcePowerOfTwo>)) {
+        (SpscQueue<uint64_t, 8192, DoNotEnforcePowerOfTwo>),
+        (SpscQueue<uint64_t, 8192, DoNotEnforcePowerOfTwo, UseStackBuffer>)) {
     fuzzTest<TestType>(1, 8192);
 }
 
 TEMPLATE_TEST_CASE("SpscQueueTest PowerOfTwo MinSize", "[fuzz][spscqueue]", 
         (SpscQueue<uint64_t, 0, EnforcePowerOfTwo>),
         (SpscQueue<uint64_t, 2, EnforcePowerOfTwo>),
+        (SpscQueue<uint64_t, 2, EnforcePowerOfTwo, UseStackBuffer>),
         (SpscQueue<uint64_t, 0, DoNotEnforcePowerOfTwo>),
-        (SpscQueue<uint64_t, 2, DoNotEnforcePowerOfTwo>)) {
+        (SpscQueue<uint64_t, 2, DoNotEnforcePowerOfTwo>),
+        (SpscQueue<uint64_t, 2, DoNotEnforcePowerOfTwo, UseStackBuffer>)) {
     fuzzTest<TestType>(1, 2);
 }
 
 TEMPLATE_TEST_CASE("SpscQueueTest NonPowerOfTwo", "[fuzz][spscqueue]", 
         (SpscQueue<uint64_t, 0, DoNotEnforcePowerOfTwo>),
-        (SpscQueue<uint64_t, 8193, DoNotEnforcePowerOfTwo>)) {
+        (SpscQueue<uint64_t, 8193, DoNotEnforcePowerOfTwo>),
+        (SpscQueue<uint64_t, 8193, DoNotEnforcePowerOfTwo, UseStackBuffer>)) {
     fuzzTest<TestType>(1, 8193);
 }
 
 TEMPLATE_TEST_CASE("SpscQueueTest NonPowerOfTwo MinSize", "[fuzz][spscqueue]", 
         (SpscQueue<uint64_t, 0, DoNotEnforcePowerOfTwo>),
-        (SpscQueue<uint64_t, 3, DoNotEnforcePowerOfTwo>)) {
+        (SpscQueue<uint64_t, 3, DoNotEnforcePowerOfTwo>),
+        (SpscQueue<uint64_t, 3, DoNotEnforcePowerOfTwo, UseStackBuffer>)) {
     fuzzTest<TestType>(1, 3);
 }

@@ -27,9 +27,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 namespace jdz
 {
 
+// Determines whether capacity should be enforced to be a power of two size, allowing for an optimized modulo.
 struct EnforcePowerOfTwo {};
-
 struct DoNotEnforcePowerOfTwo {};
+
+// Passing as final template parameter to a queue will determine if using HeapBuffer or StackBuffer (default = HeapBuffer)
+// Note that using UseStackBuffer may cause a segfault when attempting to create too large of an array.
+// Ensure you pick an appropriate capacity for your stack size limit, or increase this using ie `ulimit -s` on linux
+struct UseHeapBuffer;
+struct UseStackBuffer;
 
 namespace details
 {
@@ -74,8 +80,11 @@ concept IsTrivialType = std::is_trivially_copyable_v<T>
                      && std::is_trivially_destructible_v<T>
                      && sizeof(T) <= sizeof(uint64_t);
 
+template <typename T>
+concept BufferType = std::is_same_v<T, UseHeapBuffer> || std::is_same_v<T, UseStackBuffer>;
+
 template <typename T, IsValidSizeConstraint SizeConstraint, size_t N = 0>
-class Buffer
+class HeapBuffer
 {
 private:
     T *buffer_;
@@ -86,14 +95,14 @@ private:
     std::allocator<T> allocator_;
 
 public:
-    explicit Buffer(const size_t buffer_size, const std::allocator<T> &allocator)
+    explicit HeapBuffer(const size_t buffer_size, const std::allocator<T> &allocator)
         : buffer_size_(buffer_size),
           buffer_mask_(buffer_size_ - 1),
           allocator_(allocator) {
-            buffer_ = allocator_.allocate(buffer_size + 1);
+            buffer_ = allocator_.allocate(buffer_size_ + 1);
         }
 
-    ~Buffer() noexcept {
+    ~HeapBuffer() noexcept {
         allocator_.deallocate(buffer_, buffer_size_ + 1);
     }
 
@@ -119,6 +128,26 @@ public:
         else {
             return buffer_[index % buffer_size_];
         }
+    }
+};
+
+template <typename T, size_t N>
+class StackBuffer
+{
+private:
+    std::array<T, N+1> buffer_;
+
+public:
+    StackBuffer(auto, auto) noexcept {}
+
+    ~StackBuffer() noexcept = default;
+
+    T& operator[](const size_t index) noexcept {
+        return buffer_[index % N];
+    }
+
+    const T& operator[](const size_t index) const noexcept {
+        return buffer_[index % N];
     }
 };
 
@@ -207,7 +236,7 @@ public:
     Cell(size_t i) : SeqField<HasSeq>(i), IsConstructedField<HasSeq, IsTriviallyDestructible>(false) {}
 
     ~Cell() noexcept
-    requires TriviallyDestructible {}
+    requires IsTriviallyDestructible {}
 
     ~Cell() noexcept {
         if constexpr (IsNotTriviallyDestructible) {
@@ -248,17 +277,24 @@ concept IsValidMpmcQueue = IsValidQueue<T, N, SizeConstraint> && FalseSharingSaf
 
 template <typename T, size_t N, typename SizeConstraint>
 concept IsValidSpscQueue = IsValidQueue<T, N, SizeConstraint>;
- 
-template <typename DerivedImpl, bool UseSeq, typename T, size_t N = 0, IsValidSizeConstraint SizeConstraint = EnforcePowerOfTwo>
+
+template <typename DerivedImpl, bool UseSeq, typename T, size_t N = 0, IsValidSizeConstraint SizeConstraint = EnforcePowerOfTwo, BufferType BufType = UseHeapBuffer>
 requires IsValidQueue<T, N, SizeConstraint>
 class BaseQueue
 {
 private:
+    static constexpr bool UseStack = std::is_same_v<BufType, UseStackBuffer>;
+
+    static_assert(!UseStack || (UseStack && N != 0),
+        "Capacity must be set via comptime-parameter to a non-zero value if using UseStackBuffer");
+
     using value_t = Cell<T, UseSeq>;
+    using heap_buf = HeapBuffer<value_t, SizeConstraint, N>;
+    using stack_buf = StackBuffer<value_t, N>;
 
     using allocator_t = typename std::allocator<value_t>;
 
-    using buffer_t = Buffer<value_t, SizeConstraint, N>;
+    using buffer_t = typename std::conditional_t<UseStack, stack_buf, heap_buf>;
 
 protected:
     alignas(cache_line) buffer_t buffer_;
@@ -282,12 +318,10 @@ public:
             }
         }
 
-        static_assert(details::SizeMultipleOfCacheLine<BaseQueue>,
-            "Queue size must be a multiple of a cache line to prevent false sharing with adjacent queues");
-
         for (size_t i = 0; i < buffer_size; i++) {
             new (&buffer_[i]) value_t(i);
         }
+
     }
 
     ~BaseQueue() noexcept {
@@ -364,12 +398,17 @@ static inline bool cas_add_one_relaxed(std::atomic<size_t> &atomic, size_t& val)
 
 } // namespace details
 
-template <typename T, size_t N = 0, details::IsValidSizeConstraint SizeConstraint = EnforcePowerOfTwo>
+template <
+    typename T,
+    size_t N = 0,
+    details::IsValidSizeConstraint SizeConstraint = EnforcePowerOfTwo,
+    details::BufferType BufType = UseHeapBuffer
+>
 requires details::IsValidMpmcQueue<T, N, SizeConstraint>
-class MpmcQueue : public details::BaseQueue<MpmcQueue<T, N, SizeConstraint>, true, T, N, SizeConstraint>
+class MpmcQueue : public details::BaseQueue<MpmcQueue<T, N, SizeConstraint, BufType>, true, T, N, SizeConstraint, BufType>
 {
 private:
-    using base_queue_t = details::BaseQueue<MpmcQueue<T, N, SizeConstraint>, true, T, N, SizeConstraint>;
+    using base_queue_t = details::BaseQueue<MpmcQueue<T, N, SizeConstraint, BufType>, true, T, N, SizeConstraint, BufType>;
     using allocator_t = typename std::allocator<details::Cell<T, true>>;
 
     alignas(details::cache_line) std::atomic<size_t> enqueue_pos_{0};
@@ -456,12 +495,17 @@ public:
     }
 };
 
-template <typename T, size_t N = 0, details::IsValidSizeConstraint SizeConstraint = EnforcePowerOfTwo>
+template <
+    typename T,
+    size_t N = 0,
+    details::IsValidSizeConstraint SizeConstraint = EnforcePowerOfTwo,
+    details::BufferType BufType = UseHeapBuffer
+>
 requires details::IsValidSpscQueue<T, N, SizeConstraint>
-class SpscQueue : public details::BaseQueue<SpscQueue<T, N, SizeConstraint>, false, T, N, SizeConstraint>
+class SpscQueue : public details::BaseQueue<SpscQueue<T, N, SizeConstraint, BufType>, false, T, N, SizeConstraint, BufType>
 {
 private:
-    using base_queue_t = details::BaseQueue<SpscQueue<T, N, SizeConstraint>, false, T, N, SizeConstraint>;
+    using base_queue_t = details::BaseQueue<SpscQueue<T, N, SizeConstraint, BufType>, false, T, N, SizeConstraint, BufType>;
     using allocator_t = typename std::allocator<details::Cell<T, false>>;
 
     alignas(details::cache_line) std::atomic<size_t> enqueue_pos_{0};
