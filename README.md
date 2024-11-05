@@ -76,14 +76,15 @@ I also plan to add benchmarks of the queues used as SPMC/MPSC, which may produce
 *Note that the original Vyukov implementation did not contain blocking methods.
 
 ## SPSC Benchmarks:
-These benchmarks show the time for one producer to transmit 1 billion uint64_t to one consumer. Benchmarks were run 5 times and averaged. Benchmarks are run with a capacity of 65536, or 65537 for non-power of 2 jdz trials. Power of 2/compile-time known size queues from this repository are the best performing, followed by Maxim Egorushkin's atomic queue (which also uses compile-time known power of 2 sizes). This repository's non-power of 2 runtime-sized queues achieve better performance than other non-power of 2 runtime-sized queues.
+These benchmarks measure the ops/ms of one producer transmitting 1 billion uint64_t to one consumer. Benchmarks were run 5 times and averaged. Benchmarks are run with a capacity of 65536, or 65537 for non-power of 2 jdz trials. Power of 2 queues from this repository are the best performing, followed by drogalis's queue.
 
 Benchmarked queues are:
 
-- `jdz-cmp-pow2`: jdz queue: `jdz::SpscQueue<uint64_t, 65536, jdz::EnforcePowerOfTwo>` - compile-time power of 2 capacity.
+- `jdz-cmp-pow2`: jdz queue: `jdz::SpscQueue<uint64_t, 65536, jdz::EnforcePowerOfTwo, jdz::UseStackBuffer>` - compile-time power of 2 capacity.
 - `jdz-run-pow2`: jdz queue: `jdz::SpscQueue<uint64_t, 0, jdz:::EnforcePowerOfTwo>` - runtime power of 2 capacity.
-- `jdz-cmp`:      jdz queue: `jdz::SpscQueue<uint64_t, 65537, jdz::DoNotEnforcePowerOfTwo>` - compile-time non-power of 2 capacity.
+- `jdz-cmp`:      jdz queue: `jdz::SpscQueue<uint64_t, 65537, jdz::DoNotEnforcePowerOfTwo, jdz::UseStackBuffer>` - compile-time non-power of 2 capacity.
 - `jdz-run`:      jdz queue: `jdz::SpscQueue<uint64_t, 0, jdz::DoNotEnforcePowerOfTwo>` - runtime non-power of 2 capacity.
+- `dro`:          [Andrew Drogalis's SPSC-Queue](https://github.com/drogalis)
 - `rigtorp`:      [Erik Rigtorp's SpscQueue](https://github.com/rigtorp/SPSCQueue).
 - `atomic_queue`: [Maxim Egorushkin's atomic_queue](https://github.com/max0x7ba/atomic_queue) with SPSC=true.
 - `deaod`:        [deaod's spsc_queue](https://github.com/Deaod/spsc_queue).
@@ -92,11 +93,13 @@ Benchmarked queues are:
 
 ### x86_64 - Intel i7-11800H
 
-![spscl](https://i.imgur.com/MAqus9m.png)
+![spscl](https://i.imgur.com/imU4c1K.png)
 
 ### aarch64 - Apple M1 Silicon
 
 Interestingly, `jdz-cmp`'s modulo operation is not optimized well on this benchmark despite the compile-time known size.
+
+This is outdated and has not been run on the latest version, which contains some performance improves for all jdz queues.
 
 ![spsca](https://i.imgur.com/QqPnC5W.png)
 
@@ -107,9 +110,9 @@ We can see clearly that moodycamel's queue is the best by far N threads > N core
 
 Benchmarked queues are:
 
-- `jdz-cmp-pow2`:  jdz queue: `jdz::MpmcQueue<uint64_t, 65536, jdz::EnforcePowerOfTwo>` - compile-time power of 2 capacity.
+- `jdz-cmp-pow2`:  jdz queue: `jdz::MpmcQueue<uint64_t, 65536, jdz::EnforcePowerOfTwo, jdz::UseStackBuffer>` - compile-time power of 2 capacity.
 - `jdz-run-pow2`:  jdz queue: `jdz::MpmcQueue<uint64_t, 0, jdz:::EnforcePowerOfTwo>` - runtime power of 2 capacity.
-- `jdz-cmp`:       jdz queue: `jdz::MpmcQueue<uint64_t, 65537, jdz::DoNotEnforcePowerOfTwo>` - compile-time non-power of 2 capacity.
+- `jdz-cmp`:       jdz queue: `jdz::MpmcQueue<uint64_t, 65537, jdz::DoNotEnforcePowerOfTwo, jdz::UseStackBuffer>` - compile-time non-power of 2 capacity.
 - `jdz-run`:       jdz queue: `jdz::MpmcQueue<uint64_t, 0, jdz::DoNotEnforcePowerOfTwo>` - runtime non-power of 2 capacity.
 - `rigtorp`:       [Erik Rigtorp's MpmcQueue](https://github.com/rigtorp/MPMCQueue).
 - `atomic_queue`:  [Maxim Egorushkin's atomic_queue](https://github.com/max0x7ba/atomic_queue).
