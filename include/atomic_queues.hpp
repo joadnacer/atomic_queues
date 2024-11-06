@@ -27,7 +27,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 namespace jdz
 {
 
-// Determines whether capacity should be enforced to be a power of two size, allowing for an optimized modulo.
+// Determines whether capacity should be enforced to be a power of two size, allowing for use of bitwise instead of a modulo/ternary for mpmc/spsc.
 struct EnforcePowerOfTwo {};
 struct DoNotEnforcePowerOfTwo {};
 
@@ -83,7 +83,15 @@ concept IsTrivialType = std::is_trivially_copyable_v<T>
 template <typename T>
 concept BufferType = std::is_same_v<T, UseHeapBuffer> || std::is_same_v<T, UseStackBuffer>;
 
-template <typename T, IsValidSizeConstraint SizeConstraint, size_t N = 0>
+template <size_t N, details::IsValidSizeConstraint SizeConstraint>
+constexpr size_t PlusOneIfNotPowerOfTwo = N == 0 ? 0 : (std::is_same_v<SizeConstraint, EnforcePowerOfTwo> ? N : N + 1);
+
+template <details::IsValidSizeConstraint SizeConstraint>
+size_t plus_one_if_not_pow2(const size_t n) {
+    return n == 0 ? 0 : (std::is_same_v<SizeConstraint, EnforcePowerOfTwo> ? n : n + 1);
+}
+
+template <typename T, IsValidSizeConstraint SizeConstraint, bool ApplyModulo, size_t N = 0>
 class HeapBuffer
 {
 private:
@@ -107,7 +115,10 @@ public:
     }
 
     T& operator[](const size_t index) noexcept {
-        if constexpr (IsEnforcePowerOfTwo<SizeConstraint>) {
+        if constexpr (!ApplyModulo) {
+            return buffer_[index];
+        }
+        else if constexpr (IsEnforcePowerOfTwo<SizeConstraint>) {
             return buffer_[index & buffer_mask_]; 
         }
         else if constexpr (N != 0) {
@@ -119,6 +130,9 @@ public:
     }
 
     const T& operator[](const size_t index) const noexcept {
+        if constexpr (!ApplyModulo) {
+            return buffer_[index];
+        }
         if constexpr (IsEnforcePowerOfTwo<SizeConstraint>) {
             return buffer_[index & buffer_mask_];
         }
@@ -131,7 +145,7 @@ public:
     }
 };
 
-template <typename T, size_t N>
+template <typename T, size_t N, bool ApplyModulo>
 class StackBuffer
 {
 private:
@@ -143,11 +157,21 @@ public:
     ~StackBuffer() noexcept = default;
 
     T& operator[](const size_t index) noexcept {
-        return buffer_[index % N];
+        if constexpr (ApplyModulo) {
+            return buffer_[index % N];
+        }
+        else {
+            return buffer_[index];
+        }
     }
 
     const T& operator[](const size_t index) const noexcept {
-        return buffer_[index % N];
+        if constexpr (ApplyModulo) {
+            return buffer_[index % N];
+        }
+        else {
+            return buffer_[index];
+        }
     }
 };
 
@@ -278,7 +302,15 @@ concept IsValidMpmcQueue = IsValidQueue<T, N, SizeConstraint> && FalseSharingSaf
 template <typename T, size_t N, typename SizeConstraint>
 concept IsValidSpscQueue = IsValidQueue<T, N, SizeConstraint>;
 
-template <typename DerivedImpl, bool UseSeq, typename T, size_t N = 0, IsValidSizeConstraint SizeConstraint = EnforcePowerOfTwo, BufferType BufType = UseHeapBuffer>
+template <
+    typename DerivedImpl,
+    bool UseSeq,
+    bool ApplyModulo,
+    typename T,
+    size_t N = 0,
+    IsValidSizeConstraint SizeConstraint = EnforcePowerOfTwo,
+    BufferType BufType = UseHeapBuffer
+>
 requires IsValidQueue<T, N, SizeConstraint>
 class BaseQueue
 {
@@ -289,8 +321,8 @@ private:
         "Capacity must be set via comptime-parameter to a non-zero value if using UseStackBuffer");
 
     using value_t = Cell<T, UseSeq>;
-    using heap_buf = HeapBuffer<value_t, SizeConstraint, N>;
-    using stack_buf = StackBuffer<value_t, N>;
+    using heap_buf = HeapBuffer<value_t, SizeConstraint, ApplyModulo, N>;
+    using stack_buf = StackBuffer<value_t, N, ApplyModulo>;
 
     using allocator_t = typename std::allocator<value_t>;
 
@@ -303,7 +335,7 @@ protected:
 
 public:
     explicit BaseQueue(const size_t buffer_size = N, const allocator_t &allocator = allocator_t()) 
-                                    : buffer_(buffer_size, allocator), buffer_size_(buffer_size) {
+                : buffer_(buffer_size, allocator), buffer_size_(buffer_size) {
 
         if constexpr (N != 0) {
             assert(buffer_size == N
@@ -376,7 +408,20 @@ public:
     }
 
     /// Will return a negative value if there are one or more readers waiting on an empty queue
-    [[nodiscard]] size_t size() const noexcept {
+    template <typename U = SizeConstraint>
+    [[nodiscard]]typename std::enable_if_t<!std::is_same_v<U, jdz::EnforcePowerOfTwo>, size_t>
+    size() const noexcept {
+        std::ptrdiff_t diff = static_cast<const DerivedImpl*>(this)->get_enqueue_pos()
+                            - static_cast<const DerivedImpl*>(this)->get_dequeue_pos();
+
+        if (diff < 0) diff += buffer_size_;
+
+        return static_cast<size_t>(diff);
+    }
+
+    template <typename U = SizeConstraint>
+    [[nodiscard]] typename std::enable_if_t<std::is_same_v<U, jdz::EnforcePowerOfTwo>, size_t>
+    size() const noexcept {
         return static_cast<const DerivedImpl*>(this)->get_enqueue_pos()
              - static_cast<const DerivedImpl*>(this)->get_dequeue_pos();
     }
@@ -405,10 +450,10 @@ template <
     details::BufferType BufType = UseHeapBuffer
 >
 requires details::IsValidMpmcQueue<T, N, SizeConstraint>
-class MpmcQueue : public details::BaseQueue<MpmcQueue<T, N, SizeConstraint, BufType>, true, T, N, SizeConstraint, BufType>
+class MpmcQueue : public details::BaseQueue<MpmcQueue<T, N, SizeConstraint, BufType>, true, true, T, N, SizeConstraint, BufType>
 {
 private:
-    using base_queue_t = details::BaseQueue<MpmcQueue<T, N, SizeConstraint, BufType>, true, T, N, SizeConstraint, BufType>;
+    using base_queue_t = details::BaseQueue<MpmcQueue<T, N, SizeConstraint, BufType>, true, true, T, N, SizeConstraint, BufType>;
     using allocator_t = typename std::allocator<details::Cell<T, true>>;
 
     alignas(details::cache_line) std::atomic<size_t> enqueue_pos_{0};
@@ -502,10 +547,25 @@ template <
     details::BufferType BufType = UseHeapBuffer
 >
 requires details::IsValidSpscQueue<T, N, SizeConstraint>
-class SpscQueue : public details::BaseQueue<SpscQueue<T, N, SizeConstraint, BufType>, false, T, N, SizeConstraint, BufType>
+class SpscQueue : public details::BaseQueue<
+    SpscQueue<T, N, SizeConstraint, BufType>,
+    false, std::is_same_v<SizeConstraint,
+    jdz::EnforcePowerOfTwo>,
+    T,
+    details::PlusOneIfNotPowerOfTwo<N, SizeConstraint>,
+    SizeConstraint, BufType
+>
 {
 private:
-    using base_queue_t = details::BaseQueue<SpscQueue<T, N, SizeConstraint, BufType>, false, T, N, SizeConstraint, BufType>;
+    using base_queue_t = details::BaseQueue<
+        SpscQueue<T, N, SizeConstraint, BufType>,
+        false, std::is_same_v<SizeConstraint,
+        jdz::EnforcePowerOfTwo>,
+        T,
+        details::PlusOneIfNotPowerOfTwo<N, SizeConstraint>,
+        SizeConstraint, BufType
+    >;
+
     using allocator_t = typename std::allocator<details::Cell<T, false>>;
 
     alignas(details::cache_line) std::atomic<size_t> enqueue_pos_{0};
@@ -516,42 +576,45 @@ private:
 
 public:
     explicit SpscQueue(const size_t buffer_size = N, const allocator_t &allocator = allocator_t()) 
-                        : base_queue_t(buffer_size, allocator) {}
+                        : base_queue_t(details::plus_one_if_not_pow2<SizeConstraint>(buffer_size), allocator) {}
 
     template <typename... Args>
     void emplace(Args &&... args) noexcept
     requires std::is_nothrow_constructible_v<T, Args &&...> {
         const size_t pos = enqueue_pos_.load(std::memory_order::relaxed);
+        const size_t pos_tmp = get_pos_tmp(pos);
         auto &cell = this->buffer_[pos];
 
-        while (pos == cached_enqueue_limit_) {
-            cached_enqueue_limit_ = dequeue_pos_.load(std::memory_order::acquire) + this->buffer_size_;
+        while (pos_tmp == cached_enqueue_limit_) {
+            cached_enqueue_limit_ = dequeue_pos_.load(std::memory_order::acquire) + buffer_size_if_pow2();
         }
 
         cell.construct(std::forward<Args>(args)...);
-        enqueue_pos_.store(pos + 1, std::memory_order::release);
+        enqueue_pos_.store(get_store_pos(pos_tmp), std::memory_order::release);
     }
 
     template <typename... Args>
     [[nodiscard]] bool try_emplace(Args &&... args) noexcept
     requires std::is_nothrow_constructible_v<T, Args &&...> {
         const size_t pos = enqueue_pos_.load(std::memory_order::relaxed);
+        const size_t pos_tmp = get_pos_tmp(pos);
         auto &cell = this->buffer_[pos];
 
-        if (pos == cached_enqueue_limit_) {
-            cached_enqueue_limit_ = dequeue_pos_.load(std::memory_order::acquire) + this->buffer_size_;
+        if (pos_tmp == cached_enqueue_limit_) {
+            cached_enqueue_limit_ = dequeue_pos_.load(std::memory_order::acquire) + buffer_size_if_pow2();
 
-            if (pos == cached_enqueue_limit_) return false;
+            if (pos_tmp == cached_enqueue_limit_) return false;
         }
 
         cell.construct(std::forward<Args>(args)...);
-        enqueue_pos_.store(pos + 1, std::memory_order::release);
+        enqueue_pos_.store(get_store_pos(pos_tmp), std::memory_order::release);
 
         return true;
     }
     
     void pop(T &v) noexcept {
         const size_t pos = dequeue_pos_.load(std::memory_order::relaxed);
+        const size_t pos_tmp = get_pos_tmp(pos);
         auto &cell = this->buffer_[pos];
 
         while (pos == cached_dequeue_limit_) {
@@ -561,11 +624,12 @@ public:
         v = cell.read();
         cell.destroy();
 
-        dequeue_pos_.store(pos + 1, std::memory_order::release);
+        dequeue_pos_.store(get_store_pos(pos_tmp), std::memory_order::release);
     }
 
     [[nodiscard]] bool try_pop(T &v) noexcept {
         const size_t pos = dequeue_pos_.load(std::memory_order::relaxed);
+        const size_t pos_tmp = get_pos_tmp(pos);
         auto &cell = this->buffer_[pos];
 
         if (pos == cached_dequeue_limit_) {
@@ -577,7 +641,7 @@ public:
         v = cell.read();
         cell.destroy();
 
-        dequeue_pos_.store(pos + 1, std::memory_order::release);
+        dequeue_pos_.store(get_store_pos(pos_tmp), std::memory_order::release);
 
         return true;
     }
@@ -589,6 +653,55 @@ public:
     [[nodiscard]] size_t get_dequeue_pos() const noexcept {
         return dequeue_pos_.load(std::memory_order::relaxed);
     }
+
+    template <typename U = SizeConstraint, size_t NN = N>
+    [[nodiscard]] typename std::enable_if_t<!std::is_same_v<U, jdz::EnforcePowerOfTwo> && NN == 0, size_t>
+    get_pos_tmp(const size_t pos) const noexcept {
+        return pos + 1 == this->buffer_size_ ? 0 : pos + 1;
+    }
+
+    template <typename U = SizeConstraint, size_t NN = N>
+    [[nodiscard]] typename std::enable_if_t<!std::is_same_v<U, jdz::EnforcePowerOfTwo> && NN != 0, size_t>
+    get_pos_tmp(const size_t pos) const noexcept {
+        return pos + 1 == (N+1) ? 0 : pos + 1;
+    }
+
+    template <typename U = SizeConstraint, size_t NN = N>
+    [[nodiscard]] typename std::enable_if_t<std::is_same_v<U, jdz::EnforcePowerOfTwo>, size_t>
+    get_pos_tmp(const size_t pos) const noexcept {
+        return pos;
+    }
+
+    template <typename U = SizeConstraint>
+    [[nodiscard]] typename std::enable_if_t<!std::is_same_v<U, jdz::EnforcePowerOfTwo>, size_t>
+    get_store_pos(const size_t pos) const noexcept {
+        return pos;
+    }
+
+    template <typename U = SizeConstraint>
+    [[nodiscard]] typename std::enable_if_t<std::is_same_v<U, jdz::EnforcePowerOfTwo>, size_t>
+    get_store_pos(const size_t pos) const noexcept {
+        return pos + 1;
+    }
+    
+    template <typename U = SizeConstraint, size_t NN = N>
+    [[nodiscard]] typename std::enable_if_t<!std::is_same_v<U, jdz::EnforcePowerOfTwo>, size_t>
+    buffer_size_if_pow2() const noexcept {
+        return 0;
+    }
+
+    template <typename U = SizeConstraint, size_t NN = N>
+    [[nodiscard]] typename std::enable_if_t<std::is_same_v<U, jdz::EnforcePowerOfTwo> && NN == 0, size_t>
+    buffer_size_if_pow2() const noexcept {
+        return this->buffer_size_;
+    }
+    
+    template <typename U = SizeConstraint, size_t NN = N>
+    [[nodiscard]] typename std::enable_if_t<std::is_same_v<U, jdz::EnforcePowerOfTwo> && NN != 0, size_t>
+    buffer_size_if_pow2() const noexcept {
+        return N;
+    }
 };
+
 
 } // namespace jdz
