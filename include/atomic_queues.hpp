@@ -552,7 +552,11 @@ class SpscQueue : public details::BaseQueue<
     false, std::is_same_v<SizeConstraint,
     jdz::EnforcePowerOfTwo>,
     T,
+    #ifdef __clang__
+    N,
+    #else
     details::PlusOneIfNotPowerOfTwo<N, SizeConstraint>,
+    #endif
     SizeConstraint, BufType
 >
 {
@@ -562,7 +566,11 @@ private:
         false, std::is_same_v<SizeConstraint,
         jdz::EnforcePowerOfTwo>,
         T,
+        #ifdef __clang__
+        N,
+        #else
         details::PlusOneIfNotPowerOfTwo<N, SizeConstraint>,
+        #endif
         SizeConstraint, BufType
     >;
 
@@ -576,7 +584,11 @@ private:
 
 public:
     explicit SpscQueue(const size_t buffer_size = N, const allocator_t &allocator = allocator_t()) 
+    #ifdef __clang__
+                        : base_queue_t(buffer_size, allocator) {}
+    #else
                         : base_queue_t(details::plus_one_if_not_pow2<SizeConstraint>(buffer_size), allocator) {}
+    #endif
 
     template <typename... Args>
     void emplace(Args &&... args) noexcept
@@ -654,6 +666,30 @@ public:
         return dequeue_pos_.load(std::memory_order::relaxed);
     }
 
+    #ifdef __clang__
+
+    template <size_t NN = N>
+    [[nodiscard]] typename std::enable_if_t<NN == 0, size_t>
+    get_pos_tmp(const size_t pos) const noexcept {
+        return pos + 1 == this->buffer_size_ ? 0 : pos + 1;
+    }
+
+    template <size_t NN = N>
+    [[nodiscard]] typename std::enable_if_t<NN != 0, size_t>
+    get_pos_tmp(const size_t pos) const noexcept {
+        return pos + 1 == (N+1) ? 0 : pos + 1;
+    }
+
+    [[nodiscard]] size_t get_store_pos(const size_t pos) const noexcept {
+        return pos;
+    }
+
+    [[nodiscard]] size_t buffer_size_if_pow2() const noexcept {
+        return 0;
+    }
+
+    #else
+
     template <typename U = SizeConstraint, size_t NN = N>
     [[nodiscard]] typename std::enable_if_t<!std::is_same_v<U, jdz::EnforcePowerOfTwo> && NN == 0, size_t>
     get_pos_tmp(const size_t pos) const noexcept {
@@ -701,6 +737,8 @@ public:
     buffer_size_if_pow2() const noexcept {
         return N;
     }
+
+    #endif
 };
 
 
